@@ -7946,7 +7946,7 @@ function frame(now){
   updateAudio(rpmN,input.gas,sp,audioSlip,input.brake,paused&&!garageOpen||!started||onFoot||!engineOn);
   if(garageOpen&&AC&&A.e1)updateAudio(.25,0,0,0,0,true);
   // render
-  frameNo++;if(window.NJ)NJ.update();
+  frameNo++;if(window.NJ)NJ.update(typeof dt==='number'?dt:.033);
   shadowFollow();
   if(!garageOpen&&started&&!onFoot&&!mapOpen&&!FL.on){
     const m=carObj.mirror,pers=view==='cockpit',intV=carObj.interior&&carObj.interior.group.visible;
@@ -9267,7 +9267,7 @@ function v6Step(dt){
 v6Dot();
 
 
-window.MXENV={scene,P,teleport,toast,carRoot,skyDome,sunMesh,moonMesh,stars,clouds,get dayF(){return dayF;}};
+window.MXENV={scene,P,camera,buildCar,CARS,teleport,toast,carRoot,skyDome,sunMesh,moonMesh,stars,clouds,get dayF(){return dayF;}};
 const __gameObj={buildCar,scene,camera,renderer,hemi,sunL,moonL,carMat,setGear:g=>setGear(g),NAMES,PAY,payNetRecv,get engineOn(){return engineOn;},FL,PLANES,startFlight,endFlight,renderGarage,setGFilter:f=>{gFilter=f;},setEngine:v=>{engineOn=v;syncStart();},openMap:()=>openMap(),MAPPOIS:()=>MAPPOIS,carRoot,P,save,CARS,traffic,get gear(){return gearSel;},get active(){return active;},get board(){return board;},get rpm(){return rpmN;},get view(){return view;},
   setView:v=>{view=v;},startMission,startLevel,setMode,chooseMode,LEVELS,trySelect,input,setWeather:w=>{weather=w;},setHour:h=>{gameHour=h;timeAuto=false;},
   get paused(){return paused;},carObj:()=>carObj,openGarage,closeGarage,
