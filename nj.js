@@ -95,15 +95,30 @@ function building(B,pts,hgt,kind,seedA,seedB){
     const area=Math.abs(s)/2;if(kind>=2&&kind!==4&&area>1400)H+=r2*18;
   }
   H=Math.max(3,Math.min(H,260));
+  let roofDone=false;
   const wallCol=BPAL[Math.floor(r2*BPAL.length)];
   const wc=col(wallCol,1,r1),rc=col(0x5a5d62,1,r2);
+  const areaB=Math.abs(s)/2;
+  if((kind===0||(kind===7&&H<9&&areaB<240))&&areaB<420&&n<=10){
+    let cx=0,cz=0;for(let i=0;i<n;i++){cx+=pts[i*2];cz+=pts[i*2+1];}cx/=n;cz/=n;
+    const rc2=col([0x7a4a3a,0x5d6065,0x8a5a45,0x4f5358,0x6b4a3d][Math.floor(r1*5)],1,r2);
+    const ka=B.v(cx,H+1.4+r2*1.6,cz,0,1,0,rc2[0]*1.1,rc2[1]*1.1,rc2[2]*1.1,.012,.012);
+    for(let i=0;i<n;i++){const j=(i+1)%n;
+      const p0=B.v(pts[i*2],H,pts[i*2+1],0,1,0,rc2[0],rc2[1],rc2[2],.012,.012),p1=B.v(pts[j*2],H,pts[j*2+1],0,1,0,rc2[0],rc2[1],rc2[2],.012,.012);
+      tri(B,p0,p1,ka,0,.6,0);}
+    roofDone=true;
+  }
   // roof
   const cont=[];for(let i=0;i<n;i++)cont.push(new THREE.Vector2(pts[i*2],pts[i*2+1]));
   let faces;try{faces=THREE.ShapeUtils.triangulateShape(cont,[]);}catch(e){faces=null;}
   if(!faces||!faces.length)return false;
-  const k0=B.p.length/3;
-  for(let i=0;i<n;i++)B.v(pts[i*2],H,pts[i*2+1],0,1,0,rc[0],rc[1],rc[2],.012,.012);
-  for(const f of faces)tri(B,k0+f[0],k0+f[1],k0+f[2],0,1,0);
+  if(!roofDone){
+    const k0=B.p.length/3;
+    for(let i=0;i<n;i++)B.v(pts[i*2],H,pts[i*2+1],0,1,0,rc[0],rc[1],rc[2],.012,.012);
+    for(const f of faces)tri(B,k0+f[0],k0+f[1],k0+f[2],0,1,0);
+    // rooftop unit on bigger flat roofs
+    if(areaB>180&&H>6){let cx=0,cz=0;for(let i=0;i<n;i++){cx+=pts[i*2];cz+=pts[i*2+1];}cx/=n;cz/=n;if(inPoly(cx,cz,pts))boxB(B,cx,H,cz,3+r1*3,1.6+r2*1.4,3+r2*3,[.42,.43,.45],false);}
+  }
   // walls
   let acc=0;
   for(let i=0;i<n;i++){
@@ -166,6 +181,13 @@ function buildTile(key,data){
   for(const p of data.p||[])polyFlat(F,polyPts(p),.015,col(0x3f7a38,.6,Math.random()));
   for(const p of data.w||[])polyFlat(F,polyPts(p),.025,col(0x2f6b99,0,0));
   for(const l of data.l||[])ribbon(F,polyPts(l),1.6,.035,col(0x2a2a2d,0,0));
+  // sidewalks first (under the asphalt)
+  for(const r of data.r||[]){
+    const t=r[0],fl=r[2];if(t<4||t>13||(fl&6))continue;
+    let w=ROAD_W[t]||5;if(r[1])w=Math.max(w,r[1]*3.3);
+    if(t===13)continue;
+    ribbon(F,polyPts(r[3]),w+(t>=8?5.2:6),.022,col(0x9b9c97,.6,.5));
+  }
   // roads, drawn big-to-small so majors win overlaps
   const roads=(data.r||[]).slice().sort((a,b)=>b[0]-a[0]);
   for(const r of roads){
@@ -178,6 +200,20 @@ function buildTile(key,data){
     if(!(fl&1)&&t<=12&&t>=2)ribbon(F,pts,.2,y+.01,col(0xd6b53a,0,0));
     else if((fl&1)&&t<=3)ribbon(F,pts,.16,y+.01,col(0xe8e8e8,0,0));
   }
+  // crosswalks at junctions (vertices shared by 2+ roads)
+  {const vm=new Map();const rs=data.r||[];
+   rs.forEach((r,ri)=>{const t=r[0];if(t<4||t>11||(r[2]&6))return;const a=r[3];for(let q=0;q+1<a.length;q+=2){const k=Math.round(a[q]/80)+','+Math.round(a[q+1]/80);let e=vm.get(k);if(!e){e=[];vm.set(k,e);}e.push([ri,q]);}});
+   let cnt=0;
+   for(const[,e]of vm){const ids=new Set(e.map(x=>x[0]));if(ids.size<2||cnt>40)continue;
+    for(const[ri,q]of e){const r=rs[ri],a=r[3];const q2=(q+2<a.length)?q+2:q-2;if(q2<0||q2>=a.length)continue;
+      let dx=(a[q2]-a[q])/10,dz=(a[q2+1]-a[q+1])/10;const L=Math.hypot(dx,dz);if(L<9)continue;dx/=L;dz/=L;
+      const px=a[q]/10,pz=a[q+1]/10,w=ROAD_W[r[0]]||6,nx=-dz,nz=dx;
+      for(let sI=-Math.floor(w/1.2/2);sI<=Math.floor(w/1.2/2);sI++){
+        const cx=px+dx*6.6+nx*sI*1.2,cz=pz+dz*6.6+nz*sI*1.2;
+        const k=F.v(cx-nx*.3-dx*1.6,.062,cz-nz*.3-dz*1.6,0,1,0,.9,.9,.9);F.v(cx+nx*.3-dx*1.6,.062,cz+nz*.3-dz*1.6,0,1,0,.9,.9,.9);F.v(cx+nx*.3+dx*1.6,.062,cz+nz*.3+dz*1.6,0,1,0,.9,.9,.9);F.v(cx-nx*.3+dx*1.6,.062,cz-nz*.3+dz*1.6,0,1,0,.9,.9,.9);
+        tri(F,k,k+1,k+2,0,1,0);tri(F,k,k+2,k+3,0,1,0);}
+      cnt++;}
+   }}
   // buildings (+ collision records)
   const col2=[];
   for(const b of data.b||[]){
@@ -185,6 +221,29 @@ function buildTile(key,data){
     if(building(Bd,pts,b[1]/10,b[0],Math.floor((ox+pts[0])*3.1),Math.floor((oz+pts[1])*3.1))){
       let x0=1e9,z0=1e9,x1=-1e9,z1=-1e9;for(let i=0;i<pts.length;i+=2){x0=Math.min(x0,pts[i]);x1=Math.max(x1,pts[i]);z0=Math.min(z0,pts[i+1]);z1=Math.max(z1,pts[i+1]);}
       col2.push({x0:x0+ox,x1:x1+ox,z0:z0+oz,z1:z1+oz,p:pts,ox,oz});
+    }
+  }
+  // street trees along local roads
+  for(const r of data.r||[]){
+    const t=r[0],fl=r[2];if(t<8||t>12||(fl&6))continue;
+    const pts=polyPts(r[3]),w=ROAD_W[t]||6;let acc=0,next=9+hash(pts[0]|0,pts[1]|0)*10,side=1;
+    for(let i=0;i<pts.length/2-1;i++){
+      const x0=pts[i*2],z0=pts[i*2+1],dx=pts[i*2+2]-x0,dz=pts[i*2+3]-z0,len=Math.hypot(dx,dz);if(len<.1)continue;const tx=dx/len,tz=dz/len;
+      while(acc+len>=next){
+        const f=(next-acc)/len,off=(w/2+2.5)*side,x=x0+dx*f-tz*off,z=z0+dz*f+tx*off;
+        let bad=false;const wx=x+ox,wz=z+oz;
+        for(let q=0;q<col2.length;q++){const b=col2[q];if(wx<b.x0-1||wx>b.x1+1||wz<b.z0-1||wz>b.z1+1)continue;if(inPoly(wx-b.ox,wz-b.oz,b.p)){bad=true;break;}}
+        if(!bad&&landAt(wx,wz)){
+          const h=hash(Math.floor(wx*7),Math.floor(wz*7)),r2=2+h*1.3,cc=col(0x2f6f2c,1,h);
+          boxB(F,x,0,z,.35,2.6,.35,[.28,.2,.12]);
+          const kk=F.v(x,2.4+r2*.9,z,0,1,0,cc[0]*1.15,cc[1]*1.15,cc[2]*1.15);
+          const ring=[];for(let a2=0;a2<6;a2++){const an=a2*Math.PI/3;ring.push(F.v(x+Math.cos(an)*r2,2.4,z+Math.sin(an)*r2,0,.6,0,cc[0],cc[1],cc[2]));}
+          for(let a2=0;a2<6;a2++){tri(F,kk,ring[a2],ring[(a2+1)%6],0,1,0);}
+          const kb=F.v(x,1.6,z,0,-1,0,cc[0]*.6,cc[1]*.6,cc[2]*.6);for(let a2=0;a2<6;a2++){tri(F,kb,ring[a2],ring[(a2+1)%6],0,-1,0);}
+        }
+        side=-side;next+=20+hash(Math.floor(wx),Math.floor(wz))*14;
+      }
+      acc+=len;
     }
   }
   const mf=new THREE.Mesh(F.geo(false),matFlat);mf.receiveShadow=true;mf.matrixAutoUpdate=false;g.add(mf);
@@ -356,13 +415,14 @@ function restoreOld(){
 
 /* ---------- enter / exit ---------- */
 NJ.enter=async function(){
-  if(NJ.on)return true;
+  if(NJ.on||NJ.entering)return true;
+  NJ.entering=true;
   M.toast('Loading New Jersey…',2500);
   initMats();
   if(!NJ.idx){
     try{
       const r=await fetch('nj/index.json');NJ.idx=await r.json();
-    }catch(e){M.toast('Could not load New Jersey map',3000);return false;}
+    }catch(e){M.toast('Could not load New Jersey map',3000);NJ.entering=false;return false;}
     LAT0=NJ.idx.origin[0];LON0=NJ.idx.origin[1];KX=KX0*Math.cos(LAT0*Math.PI/180);
     NJ.idxSet=new Set(NJ.idx.tiles);
     const m=NJ.idx.mask,bin=atob(m.bits),bits=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)bits[i]=bin.charCodeAt(i);
@@ -383,7 +443,7 @@ NJ.enter=async function(){
   const t0=performance.now();
   while((NJ.loading.size||NJ.tiles.size<3)&&performance.now()-t0<12000)await new Promise(r=>setTimeout(r,120));
   snapToRoad();
-  NJ.ready=true;
+  NJ.ready=true;NJ.entering=false;
   M.toast('Welcome to New Jersey — Bayonne',3500);
   return true;
 };

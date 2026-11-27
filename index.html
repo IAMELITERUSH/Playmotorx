@@ -4295,7 +4295,7 @@ function payNetRecv(topic,txt){
 const gfxLbl=()=>{$('gfxB').textContent='✨ Graphics: '+(GFX.q==='high'?'High (shadows, reflections)':'Standard (faster)');};
 $('gfxB').onclick=()=>{GFX.q=GFX.q==='high'?'std':'high';save.gfx=GFX.q;persist();gfxApply();gfxLbl();};
 gfxLbl();
-$('njB').onclick=async()=>{closeModal('settings');if(window.NJ&&NJ.on){NJ.exit();$('njB').textContent='🗽 Travel to New Jersey (beta)';}else if(window.NJ){const ok=await NJ.enter();if(ok)$('njB').textContent='🏙 Back to MotorCities';}};
+$('njB').onclick=async()=>{closeModal('settings');if(window.NJ&&NJ.on){save.world='city';persist();NJ.exit();$('njB').textContent='🗽 Travel to New Jersey (beta)';}else if(window.NJ){save.world='nj';persist();const ok=await NJ.enter();if(ok)$('njB').textContent='🏙 Back to MotorCities';}};
 $('credB').onclick=()=>toast('3D car models: "Realistic Cars" by vinish.dev (vinish.dev/free-3d-models), CC BY 4.0 — resized and recoloured for MotorX. New Jersey map data © OpenStreetMap contributors (ODbL).',8000);
 $('payB').onclick=()=>{closeModal('settings');payRender();openModal('payM');};
 $('payX').onclick=()=>closeModal('payM');
@@ -4333,6 +4333,7 @@ function showMenu(){
 }
 function chooseMode(m){
   setMode(m);$('start').style.display='none';started=true;paused=modalCount>0;initAudio();
+  if(window.NJ&&save.world!=='city'&&!NJ.on&&!window.__noNJ)setTimeout(()=>NJ.enter().then(ok=>{if(ok){const b=$('njB');if(b)b.textContent='🏙 Back to MotorCities';}}),400);
   if(!APP.native)try{(document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen||(()=>0)).call(document.documentElement);}catch(e){}
   toast('Hold BRAKE, press START, then tap D',3800);
   if(m==='missions'){if(!board.length)genBoard();renderBoard();openModal('missions');}
