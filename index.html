@@ -3637,7 +3637,7 @@ const wpLM=(name,stop,msg)=>{const L=lmByName(name);return{x:L.zone.x,z:L.zone.z
 const wpIX=(i,j)=>({x:i*BLOCK,z:j*BLOCK,stop:false,name:'Checkpoint'});
 function genBoard(){
   board=[];const here={x:P.x,z:P.z};
-  const far=LANDMARKS.filter(L=>dist2(here,L.zone)>160),used=new Set();
+  const far=LANDMARKS.filter(L=>dist2(here,L.zone)>160&&(!L.nj||dist2(here,L.zone)<7000)),used=new Set();
   const take=()=>{const c=far.filter(L=>!used.has(L.name));const L=pick(c.length?c:far);used.add(L.name);return L;};
   const rd=v=>Math.round(v/250)*250;
   for(const kind of['drive','drive','rush','taxi','speed','drive','multi','rush','taxi','speed','multi','drive']){
@@ -3648,11 +3648,11 @@ function genBoard(){
     }
     const L=take(),d=dist2(here,L.zone);
     if(kind==='multi'){const L2=take(),L3=take(),tot=d+dist2(L.zone,L2.zone)+dist2(L2.zone,L3.zone);
-      board.push({id:mid++,kind,icon:'📦',title:'Multi-drop: '+L.name+', '+L2.name+', '+L3.name,desc:'Three deliveries in a row, no timer.',reward:rd((4500+tot*22)*1.7),wps:[wpLM(L.name,true),wpLM(L2.name,true),wpLM(L3.name,true)]});}
-    if(kind==='drive')board.push({id:mid++,kind,icon:'📍',title:'Drive to '+L.name,desc:'Reach the marker and slow down to stop.',reward:rd(4500+d*22),wps:[wpLM(L.name,true)]});
-    if(kind==='rush'){const t=Math.round(d/12+30);board.push({id:mid++,kind,icon:'⏱',title:'Express delivery: '+L.name,desc:'Deliver the package before time runs out.',reward:rd((4500+d*22)*1.9),wps:[wpLM(L.name,true)],total:t});}
+      board.push({id:mid++,kind,icon:'📦',title:'Multi-drop: '+L.name+', '+L2.name+', '+L3.name,desc:'Three deliveries in a row, no timer.',reward:rd((4500+Math.min(tot,3500)*22)*1.7),wps:[wpLM(L.name,true),wpLM(L2.name,true),wpLM(L3.name,true)]});}
+    if(kind==='drive')board.push({id:mid++,kind,icon:'📍',title:'Drive to '+L.name,desc:'Reach the marker and slow down to stop.',reward:rd(4500+Math.min(d,2500)*22),wps:[wpLM(L.name,true)]});
+    if(kind==='rush'){const t=Math.round(d/12+30);board.push({id:mid++,kind,icon:'⏱',title:'Express delivery: '+L.name,desc:'Deliver the package before time runs out.',reward:rd((4500+Math.min(d,2500)*22)*1.9),wps:[wpLM(L.name,true)],total:t});}
     if(kind==='taxi'){const L2=take(),tot=d+dist2(L.zone,L2.zone);
-      board.push({id:mid++,kind,icon:'🚕',title:'Taxi: '+L.name+' → '+L2.name,desc:'Pick up the passenger, then drop them off.',reward:rd((4500+tot*22)*2.1),wps:[wpLM(L.name,true,'Passenger on board! Head to the drop-off.'),wpLM(L2.name,true)]});}
+      board.push({id:mid++,kind,icon:'🚕',title:'Taxi: '+L.name+' → '+L2.name,desc:'Pick up the passenger, then drop them off.',reward:rd((4500+Math.min(tot,3500)*22)*2.1),wps:[wpLM(L.name,true,'Passenger on board! Head to the drop-off.'),wpLM(L2.name,true)]});}
   }
 }
 function renderBoard(){
@@ -4452,7 +4452,7 @@ function towFee(){return Math.min(1500,save.coins);}
 function callTow(){
   const L=GAS.reduce((a,b)=>Math.hypot(P.x-a.pump.x,P.z-a.pump.z)<Math.hypot(P.x-b.pump.x,P.z-b.pump.z)?a:b);
   const fee=towFee();save.coins-=fee;save.fuel=Math.max(save.fuel,.12);persist();setCoins();
-  const dir=lw(L.i,L.j,L.o,0,9);const d1=lw(L.i,L.j,L.o,0,10);
+  const dir=L.nj?{x:L.pump.x+Math.sin(L.h)*9,z:L.pump.z+Math.cos(L.h)*9}:lw(L.i,L.j,L.o,0,9);const d1=L.nj?{x:L.pump.x+Math.sin(L.h)*10,z:L.pump.z+Math.cos(L.h)*10}:lw(L.i,L.j,L.o,0,10);
   P.x=L.pump.x;P.z=L.pump.z;P.vx=P.vz=0;P.h=Math.atan2(d1.x-L.pump.x,d1.z-L.pump.z);camAng=P.h;yawS=0;
   setGear('P');toast('🛻 Towed to '+L.name+' (−'+fmt(fee)+' coins)',3000);emptyWarned=false;
 }
@@ -9268,7 +9268,7 @@ function v6Step(dt){
 v6Dot();
 
 
-window.MXENV={scene,P,camera,buildCar,CARS,teleport,toast,carRoot,skyDome,sunMesh,moonMesh,stars,clouds,get dayF(){return dayF;}};
+window.MXENV={scene,P,camera,buildCar,CARS,teleport,toast,LANDMARKS,GAS,LMPTS,labelSprite,fmt,regenBoard:()=>{try{genBoard();renderBoard();}catch(e){}},carRoot,skyDome,sunMesh,moonMesh,stars,clouds,get dayF(){return dayF;}};
 const __gameObj={buildCar,scene,camera,renderer,hemi,sunL,moonL,carMat,setGear:g=>setGear(g),NAMES,PAY,payNetRecv,get engineOn(){return engineOn;},FL,PLANES,startFlight,endFlight,renderGarage,setGFilter:f=>{gFilter=f;},setEngine:v=>{engineOn=v;syncStart();},openMap:()=>openMap(),MAPPOIS:()=>MAPPOIS,carRoot,P,save,CARS,traffic,get gear(){return gearSel;},get active(){return active;},get board(){return board;},get rpm(){return rpmN;},get view(){return view;},
   setView:v=>{view=v;},startMission,startLevel,setMode,chooseMode,LEVELS,trySelect,input,setWeather:w=>{weather=w;},setHour:h=>{gameHour=h;timeAuto=false;},
   get paused(){return paused;},carObj:()=>carObj,openGarage,closeGarage,

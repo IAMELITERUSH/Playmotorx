@@ -398,6 +398,43 @@ function trafficUpdate(dt){
   }
 }
 
+/* ---------- real places (gas stations, hospitals, malls, landmarks...) ---------- */
+const ICON={gas:'⛽',dealer:'🚘',hospital:'🏥',mall:'🛍',stadium:'🏟',airport:'✈️',station:'🚉',hotel:'🏨',port:'🚢',fun:'⭐',school:'🎓',police:'🚓',fire:'🚒',food:'🍔',shop:'🛒',garage:'🔧',carwash:'🚿'};
+const KCOL={gas:0xe63946,dealer:0x1e88e5,hospital:0xf5f5f5,mall:0xe07a5f,stadium:0x3d7ea6,airport:0xbfc7d1,station:0x9c6644,hotel:0xb5838d,port:0x607d8b,fun:0xffd84d,school:0x2e7d32,police:0x3b5bdb,fire:0xe8590c,food:0xf4a261,shop:0x2a9d8f,garage:0x8e24aa,carwash:0x38e8ff};
+const PO={saved:null,list:[],sprites:[],grp:null};
+async function applyPois(){
+  let data;try{data=await(await fetch('nj/pois.json')).json();}catch(e){console.warn('pois',e&&e.message);return;}
+  const names=new Map();for(const p of data)names.set(p.n,(names.get(p.n)||0)+1);
+  PO.saved={L:M.LANDMARKS.slice(),G:M.GAS.slice(),P:M.LMPTS.slice()};
+  M.LANDMARKS.length=0;M.GAS.length=0;M.LMPTS.length=0;
+  PO.list=[];
+  for(const p of data){
+    let nm=p.n;if(names.get(p.n)>1&&p.r)nm=p.n+' ('+p.r+')';
+    const L={name:nm,kind:p.k==='dealer'?'dealership':p.k,icon:ICON[p.k]||'📍',color:KCOL[p.k]||0xffffff,zone:{x:p.x,z:p.z},px:p.px,pz:p.pz,h:p.h,nj:true,def:null,i:0,j:0,o:0,k0:p.k};
+    M.LANDMARKS.push(L);PO.list.push(L);
+    M.LMPTS.push({x:p.x,z:p.z,name:nm,kind:L.kind});
+    if(p.k==='gas'){L.pump={x:p.x,z:p.z};L.mult=.88+((Math.abs(Math.round(p.x*7+p.z*3))%25)/100);M.GAS.push(L);}
+  }
+  PO.grp=new THREE.Group();M.scene.add(PO.grp);
+  M.regenBoard();
+}
+function restorePois(){
+  if(!PO.saved)return;
+  M.LANDMARKS.length=0;M.LANDMARKS.push(...PO.saved.L);M.GAS.length=0;M.GAS.push(...PO.saved.G);M.LMPTS.length=0;M.LMPTS.push(...PO.saved.P);
+  PO.saved=null;PO.list=[];M.regenBoard();
+  if(PO.grp){M.scene.remove(PO.grp);PO.grp=null;}PO.sprites=[];
+}
+const SHOW_K={gas:1,hospital:1,mall:1,stadium:1,airport:1,station:1,fun:1,dealer:1,port:1,hotel:1,police:0,fire:0,food:0,shop:0,school:0,garage:0,carwash:0};
+function updatePoiMarkers(){
+  if(!PO.grp)return;
+  const near=PO.list.filter(L=>SHOW_K[L.k0]&&Math.hypot(L.px-M.P.x,L.pz-M.P.z)<520).slice(0,40);
+  const keep=new Set(near);
+  PO.sprites=PO.sprites.filter(e=>{if(keep.has(e.L)){keep.delete(e.L);return true;}PO.grp.remove(e.sp);return false;});
+  for(const L of keep){
+    const sp=M.labelSprite(L.icon+' '+L.name,'#'+L.color.toString(16).padStart(6,'0'));
+    sp.position.set(L.px,34,L.pz);PO.grp.add(sp);PO.sprites.push({L,sp});
+  }
+}
 /* ---------- hide / show the old city ---------- */
 function keepVisible(o){
   if(o===NJ.group||o===waterMesh)return true;
@@ -437,6 +474,7 @@ NJ.enter=async function(){
   const sp=toXZ(40.6693,-74.1143);
   NJ.spawn=sp;
   hideOld();
+  await applyPois();
   M.teleport(sp[0],sp[1],0);
   stream(sp[0],sp[1]);
   // wait for the first tiles
@@ -452,7 +490,7 @@ NJ.exit=function(){
   NJ.on=false;NJ.ready=false;{const mm=document.getElementById('mini');if(mm)mm.style.visibility='';}
   for(const[,t]of NJ.tiles)disposeTile(t);NJ.tiles.clear();
   M.scene.remove(NJ.group);M.scene.remove(waterMesh);if(skyline)M.scene.remove(skyline);if(NJ.farOld){M.camera.far=NJ.farOld;M.camera.updateProjectionMatrix();}for(const c of TR.cars)M.scene.remove(c.o.root);TR.cars.length=0;
-  restoreOld();
+  restoreOld();restorePois();
   M.teleport(-3.6,-60,0);
   M.toast('Back to MotorCities',2500);
 };
@@ -483,6 +521,7 @@ NJ.update=function(dt){NJ.dt=dt;
   if(NJ.frame%20===0)stream(M.P.x,M.P.z);
   trafficUpdate(Math.min(.1,NJ.dt||.033));
   if(NJ.frame%45===0)hideOld();
+  if(NJ.frame%60===5)updatePoiMarkers();
   {const dayF=M.dayF;const n=1-dayF;matLamp.color.setRGB(.35+n*.65,.35+n*.6,.35+n*.35);matGlow.opacity=n*.85;matSky.emissive.setRGB(n*.9,n*.85,.65*n);const hz=.55+.45*dayF;matSky.color.setRGB(.6*hz+.25,.68*hz+.25,.8*hz+.2);matBld.emissive.setRGB(n*1.0,n*.92,n*.7);matWater.color.setHex(0x2f6b99).multiplyScalar(.25+.75*dayF);}
 };
 })();
