@@ -13,7 +13,7 @@ let KX=KX0,LAT0=40.7,LON0=-74.09;
 const toXZ=(lat,lon)=>[(lon-LON0)*KX,-(lat-LAT0)*KY];
 
 /* ---------- materials ---------- */
-let matFlat,matBld,matWater,waterMesh,winTex,winEmi,matLamp,matGlow,matSky,skyline;
+let matShop,shopTex,matFlat,matBld,matWater,waterMesh,winTex,winEmi,matLamp,matGlow,matSky,skyline;
 function makeWinTex(){
   const S=256,c=document.createElement('canvas');c.width=c.height=S;const x=c.getContext('2d');
   x.fillStyle='#ffffff';x.fillRect(0,0,S,S);
@@ -33,6 +33,14 @@ function makeWinTex(){
 function initMats(){
   if(matFlat)return;
   makeWinTex();
+  {const c=document.createElement('canvas');c.width=1024;c.height=128;const x=c.getContext('2d');
+   const W=['DELI','PIZZA','DINER','LIQUORS','PHARMACY','NAILS','BARBER','CAFE'],AW=['#c1121f','#1d6b3a','#1e4fa3','#e9a100','#6a1b9a','#00897b','#e4572e','#264653'],BK=['#8a4b3a','#9b8f7a','#6b6f78','#a0623e'];
+   for(let i=0;i<8;i++){const ox=i*128;x.fillStyle=BK[i%4];x.fillRect(ox,0,128,128);
+    x.fillStyle=AW[i];x.fillRect(ox,8,128,26);x.fillStyle='rgba(255,255,255,.5)';for(let k=0;k<8;k++)x.fillRect(ox+k*16,8,8,26);
+    x.fillStyle='#1f2a33';x.fillRect(ox+6,40,116,78);x.fillStyle='#9fc6dc';x.fillRect(ox+10,44,50,70);x.fillRect(ox+68,44,50,36);x.fillStyle='#35424d';x.fillRect(ox+68,84,22,30);
+    x.fillStyle='#fff7d6';x.fillRect(ox+10,2,108,6);x.font='bold 18px sans-serif';x.fillStyle='#111';x.textAlign='center';x.fillText(W[i],ox+64,6+14);}
+   shopTex=new THREE.CanvasTexture(c);shopTex.anisotropy=4;
+   matShop=new THREE.MeshLambertMaterial({vertexColors:true,map:shopTex,emissive:new THREE.Color(0,0,0),emissiveMap:shopTex});}
   matFlat=new THREE.MeshLambertMaterial({vertexColors:true});
   matBld=new THREE.MeshLambertMaterial({vertexColors:true,map:winTex,emissive:new THREE.Color(0,0,0),emissiveMap:winEmi});
   matWater=new THREE.MeshLambertMaterial({color:0x2f6b99});
@@ -88,6 +96,9 @@ function deckExtras(B,pts,ys,w){
       tri(B,pk,pk+1,pk+2,-nx*sd,0,-nz*sd);tri(B,pk,pk+2,pk+3,-nx*sd,0,-nz*sd);
     }
     while(acc+L>=next){const f=(next-acc)/L,y=y0+(y1-y0)*f;if(y>2)boxB(B,x0+dx*f,0,z0+dz*f,1.6,y-1.0,1.6,pc);next+=34;}
+    if(y0>16&&y1>16){const tc=[.42,.52,.5];
+      for(const sd of[1,-1]){const ax=x0+nx*hw*sd,az=z0+nz*hw*sd,bx=x1+nx*hw*sd,bz=z1+nz*hw*sd;
+        beam(B,ax,y0+6.2,az,bx,y1+6.2,bz,.5,tc);beam(B,ax,y0+.9,az,ax,y0+6.2,az,.4,tc);beam(B,ax,y0+.9,az,bx,y1+6.2,bz,.25,tc);}}
     acc+=L;
   }
 }
@@ -175,6 +186,31 @@ function lamps(F,L,G,pts,w){
     acc+=len;
   }
 }
+function prism(B,cx,y0,cz,r0,r1,h,sides,rgb,cap){
+  const ring0=[],ring1=[];
+  for(let i=0;i<sides;i++){const an=i/sides*Math.PI*2,c=Math.cos(an),sn=Math.sin(an);
+    ring0.push(B.v(cx+c*r0,y0,cz+sn*r0,c,0,sn,rgb[0],rgb[1],rgb[2],.01,.01));
+    ring1.push(B.v(cx+c*r1,y0+h,cz+sn*r1,c,0,sn,rgb[0],rgb[1],rgb[2],.01,.01));}
+  for(let i=0;i<sides;i++){const j=(i+1)%sides;const n1=Math.cos((i+.5)/sides*Math.PI*2),n2=Math.sin((i+.5)/sides*Math.PI*2);
+    tri(B,ring0[i],ring0[j],ring1[j],n1,0,n2);tri(B,ring0[i],ring1[j],ring1[i],n1,0,n2);}
+  if(cap){const k=B.v(cx,y0+h,cz,0,1,0,rgb[0],rgb[1],rgb[2]);for(let i=0;i<sides;i++)tri(B,k,ring1[i],ring1[(i+1)%sides],0,1,0);}
+}
+function cone(B,cx,y0,cz,r,h,sides,rgb){
+  const apex=B.v(cx,y0+h,cz,0,1,0,rgb[0],rgb[1],rgb[2]);const ring=[];
+  for(let i=0;i<sides;i++){const an=i/sides*Math.PI*2;ring.push(B.v(cx+Math.cos(an)*r,y0,cz+Math.sin(an)*r,Math.cos(an),.3,Math.sin(an),rgb[0],rgb[1],rgb[2]));}
+  for(let i=0;i<sides;i++)tri(B,ring[i],ring[(i+1)%sides],apex,Math.cos((i+.5)/sides*6.283),.3,Math.sin((i+.5)/sides*6.283));
+}
+// thin rectangular beam between two points (two crossed quads -> visible from any side)
+function beam(B,x0,y0,z0,x1,y1,z1,w,rgb){
+  const dx=x1-x0,dy=y1-y0,dz=z1-z0,L=Math.hypot(dx,dy,dz)||1;
+  // horizontal offset perpendicular to the beam
+  let px=-dz,pz=dx;const pl=Math.hypot(px,pz);if(pl<1e-4){px=1;pz=0;}else{px/=pl;pz/=pl;}
+  const h=w/2;
+  const k=B.v(x0+px*h,y0,z0+pz*h,0,1,0,rgb[0],rgb[1],rgb[2]);B.v(x0-px*h,y0,z0-pz*h,0,1,0,rgb[0],rgb[1],rgb[2]);B.v(x1-px*h,y1,z1-pz*h,0,1,0,rgb[0],rgb[1],rgb[2]);B.v(x1+px*h,y1,z1+pz*h,0,1,0,rgb[0],rgb[1],rgb[2]);
+  tri(B,k,k+1,k+2,0,1,0);tri(B,k,k+2,k+3,0,1,0);tri(B,k,k+1,k+2,0,-1,0);tri(B,k,k+2,k+3,0,-1,0);
+  const m=B.v(x0,y0+h,z0,px,0,pz,rgb[0],rgb[1],rgb[2]);B.v(x0,y0-h,z0,px,0,pz,rgb[0],rgb[1],rgb[2]);B.v(x1,y1-h,z1,px,0,pz,rgb[0],rgb[1],rgb[2]);B.v(x1,y1+h,z1,px,0,pz,rgb[0],rgb[1],rgb[2]);
+  tri(B,m,m+1,m+2,px,0,pz);tri(B,m,m+2,m+3,px,0,pz);tri(B,m,m+1,m+2,-px,0,-pz);tri(B,m,m+2,m+3,-px,0,-pz);
+}
 /* ---------- tile build ---------- */
 function polyPts(a){const o=new Array(a.length);for(let i=0;i<a.length;i++)o[i]=a[i]/10;return o;}
 function inPoly(x,z,P){let c=false;const n=P.length/2;for(let i=0,j=n-1;i<n;j=i++){const xi=P[i*2],zi=P[i*2+1],xj=P[j*2],zj=P[j*2+1];if(((zi>z)!==(zj>z))&&(x<(xj-xi)*(z-zi)/(zj-zi)+xi))c=!c;}return c;}
@@ -242,6 +278,49 @@ function buildTile(key,data){
       col2.push({x0:x0+ox,x1:x1+ox,z0:z0+oz,z1:z1+oz,p:pts,ox,oz});
     }
   }
+  // shopfronts on commercial buildings
+  const Sh=new Buf();
+  for(const b of data.b||[]){
+    const kind=b[0],H=b[1]/10;if(!(kind===2||(kind===7&&H<=16)))continue;
+    const p=b[2];const n=p.length/2;if(n<4||n>10)continue;
+    const edges=[];for(let i=0;i<n;i++){const j=(i+1)%n,dx=(p[j*2]-p[i*2])/10,dz=(p[j*2+1]-p[i*2+1])/10,L=Math.hypot(dx,dz);if(L>=8)edges.push([L,i,j]);}
+    edges.sort((a,b)=>b[0]-a[0]);
+    let sg=0;for(let i=0;i<n;i++){const j=(i+1)%n;sg+=p[i*2]*p[j*2+1]-p[j*2]*p[i*2+1];}
+    for(const[L,i,j]of edges.slice(0,2)){
+      const x0=p[i*2]/10,z0=p[i*2+1]/10,x1=p[j*2]/10,z1=p[j*2+1]/10,dx=(x1-x0)/L,dz=(z1-z0)/L;let nx=dz,nz=-dx;if(sg<0){nx=-nx;nz=-nz;}
+      const bays=Math.floor(L/6.5),bw=L/bays;
+      for(let q=0;q<bays;q++){
+        const v=Math.floor(hash(Math.floor((x0+ox)*3)+q*7,Math.floor((z0+oz)*3))*8)%8,u0=v/8,u1=(v+1)/8;
+        const ax=x0+dx*bw*q+nx*.06,az=z0+dz*bw*q+nz*.06,bx=x0+dx*bw*(q+1)+nx*.06,bz=z0+dz*bw*(q+1)+nz*.06;
+        const k=Sh.v(ax,.15,az,nx,0,nz,1,1,1,u0,0);Sh.v(bx,.15,bz,nx,0,nz,1,1,1,u1,0);Sh.v(bx,3.7,bz,nx,0,nz,1,1,1,u1,1);Sh.v(ax,3.7,az,nx,0,nz,1,1,1,u0,1);
+        tri(Sh,k,k+1,k+2,nx,0,nz);tri(Sh,k,k+2,k+3,nx,0,nz);}
+    }
+  }
+  // utility poles with wires (very Jersey)
+  for(const r of data.r||[]){
+    const t=r[0],fl=r[2];if(t<4||t>11||(fl&6))continue;
+    const pts=polyPts(r[3]),w=ROAD_W[t]||6,side=(Math.abs(r[3][0]+r[3][1])%2)?1:-1;let acc=0,next=6;let last=null;
+    for(let i=0;i<pts.length/2-1;i++){
+      const x0=pts[i*2],z0=pts[i*2+1],dx=pts[i*2+2]-x0,dz=pts[i*2+3]-z0,len=Math.hypot(dx,dz);if(len<.1)continue;const tx=dx/len,tz=dz/len;
+      while(acc+len>=next){
+        const f=(next-acc)/len,off=(w/2+3.4)*side,x=x0+dx*f-tz*off,z=z0+dz*f+tx*off,wx=x+ox,wz=z+oz;
+        let bad=!landAt(wx,wz);
+        if(!bad)for(let q=0;q<col2.length;q++){const b=col2[q];if(wx<b.x0-1||wx>b.x1+1||wz<b.z0-1||wz>b.z1+1)continue;if(inPoly(wx-b.ox,wz-b.oz,b.p)){bad=true;break;}}
+        if(!bad){
+          beam(F,x,0,z,x,9.2,z,.3,[.26,.19,.13]);
+          beam(F,x-tz*1.1,8.7,z+tx*1.1,x+tz*1.1,8.7,z-tx*1.1,.14,[.22,.16,.1]);
+          if(last&&Math.hypot(x-last.x,z-last.z)<48){
+            for(const o of[-.9,.9]){
+              const ax=last.x-last.tz*o,az=last.z+last.tx*o,bx=x-tz*o,bz=z+tx*o;
+              beam(F,ax,8.7,az,bx,8.6,bz,.06,[.07,.07,.07]);}
+          }
+          last={x,z,tx:tz*0+(-tz)*0+(-0)+tx*0+tx,tz};
+        }else last=null;
+        next+=46+hash(Math.floor(wx),Math.floor(wz))*8;
+      }
+      acc+=len;
+    }
+  }
   // street trees along local roads
   for(const r of data.r||[]){
     const t=r[0],fl=r[2];if(t<8||t>12||(fl&6))continue;
@@ -267,6 +346,7 @@ function buildTile(key,data){
   }
   const mf=new THREE.Mesh(F.geo(false),matFlat);mf.receiveShadow=true;mf.matrixAutoUpdate=false;g.add(mf);
   if(Bd.i.length){const mb=new THREE.Mesh(Bd.geo(true),matBld);mb.castShadow=true;mb.receiveShadow=true;mb.matrixAutoUpdate=false;g.add(mb);}
+  if(Sh.i.length){const ms=new THREE.Mesh(Sh.geo(true),matShop);ms.matrixAutoUpdate=false;ms.receiveShadow=true;g.add(ms);}
   if(Lm.i.length){const ml=new THREE.Mesh(Lm.geo(false),matLamp);ml.matrixAutoUpdate=false;g.add(ml);}
   if(Gl.i.length){const mg=new THREE.Mesh(Gl.geo(true),matGlow);mg.matrixAutoUpdate=false;mg.renderOrder=3;g.add(mg);}
   g.updateMatrixWorld(true);
@@ -389,6 +469,50 @@ function buildSkyline(){
   const m=new THREE.Mesh(B.geo(true),matSky);m.frustumCulled=false;m.matrixAutoUpdate=false;return m;
 }
 
+/* ---------- recognisable New Jersey landmarks (procedural, fog-free) ---------- */
+let landmarkMesh,flameMat,flameMesh;
+function buildLandmarks(){
+  const B=new Buf(),FL=new Buf(),mk=(h,j)=>col(h,j||0,.5);
+  const at=(lat,lon)=>toXZ(lat,lon);
+  // Statue of Liberty (Liberty Island)
+  {const[x,z]=at(40.68925,-74.04455),cop=mk(0x5fa391),sand=mk(0xb9b3a0),gold=mk(0xe8c547);
+   boxB(B,x,0,z,46,3,46,mk(0x8a8f86),false);boxB(B,x,3,z,34,10,34,sand,false);boxB(B,x,13,z,22,34,22,sand,false);boxB(B,x,47,z,18,4,18,sand,false);
+   prism(B,x,51,z,7.5,4.4,26,10,cop,true);              // robe
+   prism(B,x,77,z,2.3,1.9,3,8,cop,true);                // neck
+   prism(B,x,80,z,3.1,2.6,6,10,cop,true);              // head
+   for(let i=0;i<7;i++){const an=-1.2+i*.4;beam(B,x+Math.sin(an)*2.6,85,z+Math.cos(an)*1.2-1,x+Math.sin(an)*8.2,88.5+Math.abs(Math.sin(an))*1,z+Math.cos(an)*3-1,.5,cop);}
+   beam(B,x+3.2,72,z,x+5,94,z+.5,2,cop);                // raised arm
+   prism(B,x+5,94,z+.5,1.6,2.2,3,8,gold,true);cone(B,x+5,97,z+.5,1.8,6,8,gold); // torch
+   boxB(B,x-5.5,66,z+1,1.6,8,5.5,cop,false);}           // tablet
+  // Goldman Sachs Tower, Jersey City
+  {const[x,z]=at(40.71505,-74.03385),g=mk(0x8196a0);boxB(B,x,0,z,48,200,48,g,true);boxB(B,x,200,z,38,22,38,g,true);prism(B,x,222,z,24,3,22,4,mk(0x9db1ba),true);}
+  // Newark Liberty Airport tower
+  {const[x,z]=at(40.6934,-74.1726),c=mk(0xc9c9c4);prism(B,x,0,z,4.2,3.2,62,10,c,true);prism(B,x,62,z,9,8,7,12,mk(0x8aa0b0),true);prism(B,x,69,z,10,6,2.4,12,c,true);}
+  // Colgate clock, Jersey City waterfront
+  {const[x,z]=at(40.71935,-74.0314);prism(B,x,0,z,.8,.8,12,6,mk(0x777777),false);prism(B,x,12,z,7.6,7.6,.9,24,mk(0xf3f3ee),true);boxB(B,x,12.5,z,.4,5.4,.4,mk(0x111111),false);boxB(B,x+1.5,12.5,z,3,.4,.4,mk(0x111111),false);}
+  // Port Newark / Elizabeth container cranes
+  {const nav=[[40.6858,-74.1588],[40.6894,-74.1556],[40.6931,-74.1522],[40.6968,-74.1490],[40.6996,-74.1465],[40.6820,-74.1620],[40.6786,-74.1650]];
+   const blue=mk(0x2d6fb5),org=mk(0xd9822b);let n=0;
+   for(const[la,lo]of nav){const[x,z]=at(la,lo),c=(n++%2)?blue:org;const ang=.62;const cs=Math.cos(ang),sn=Math.sin(ang);
+     for(const[dx,dz]of[[-9,-6],[9,-6],[-9,6],[9,6]]){const rx=x+dx*cs-dz*sn,rz=z+dx*sn+dz*cs;beam(B,rx,0,rz,rx,44,rz,1.1,c);}
+     beam(B,x-36*sn,44,z+36*cs,x+60*sn,44,z-60*cs,2.6,c);beam(B,x-36*sn,44,z+36*cs,x+60*sn,52,z-60*cs,1.1,mk(0x888888));
+     for(let q=0;q<3;q++)boxB(B,x+q*7*sn-20*sn,.1,z-q*7*cs+20*cs,13,2.6,2.6,mk([0xc1121f,0x2a9d8f,0xf4a261][q]),false);}}
+  // Bayway refinery: stacks + flares
+  {const[x,z]=at(40.6228,-74.2128),st=mk(0xb8b8b2);
+   for(let i=0;i<6;i++){const sx=x+i*38-80,sz=z+(i%2)*30,h=48+i*9;prism(B,sx,0,sz,3.2,2.2,h,8,st,true);boxB(B,sx,h*.45,sz,6,2,6,mk(0xc1121f),false);
+     if(i%3===0)cone(FL,sx,h,sz,2.2,9,6,[1,.55,.1]);}
+   for(let i=0;i<4;i++)prism(B,x-60+i*30,0,z+60,12,12,16,14,mk(0xdedede),true);}
+  // NJ Transit / PATH style: Hoboken Terminal clock tower
+  {const[x,z]=at(40.7357,-74.0291);boxB(B,x,0,z,14,40,14,mk(0xb36a4a),true);cone(B,x,40,z,11,18,4,mk(0x3f7a6a));boxB(B,x,32,z,16,2,16,mk(0xeeeeee),false);}
+  // Prudential Center & Newark Gateway towers
+  {const[x,z]=at(40.7334,-74.1712);prism(B,x,0,z,52,52,36,32,mk(0x8d99a6),true);}
+  const m=new THREE.Mesh(B.geo(true),matSky);m.matrixAutoUpdate=false;m.frustumCulled=false;
+  const grp=new THREE.Group();grp.add(m);
+  flameMat=new THREE.MeshBasicMaterial({vertexColors:true,fog:false});
+  if(FL.i.length){flameMesh=new THREE.Mesh(FL.geo(false),flameMat);flameMesh.frustumCulled=false;grp.add(flameMesh);}
+  return grp;
+}
+
 /* ---------- ambient traffic on the real roads ---------- */
 const TR={cars:[],max:14,adj:null};
 function roadGraph(){
@@ -494,7 +618,7 @@ function updatePoiMarkers(){
 function keepVisible(o){
   if(o===NJ.group||o===waterMesh)return true;
   if(o.isLight||o.isCamera)return true;
-  if(skyline&&o===skyline)return true;
+  if((skyline&&o===skyline)||(landmarkMesh&&o===landmarkMesh))return true;
   return o===M.carRoot||o===M.skyDome||o===M.sunMesh||o===M.moonMesh||o===M.stars||o===M.clouds;
 }
 function hideOld(){
@@ -522,6 +646,7 @@ NJ.enter=async function(){
   }
   NJ.group=new THREE.Group();NJ.group.name='nj';M.scene.add(NJ.group);M.scene.add(waterMesh);
   if(!skyline)skyline=buildSkyline();M.scene.add(skyline);
+  if(!landmarkMesh)landmarkMesh=buildLandmarks();M.scene.add(landmarkMesh);
   NJ.farOld=M.camera.far;M.camera.far=11000;M.camera.updateProjectionMatrix();
   NJ.on=true;{const mm=document.getElementById('mini');if(mm)mm.style.visibility='hidden';}
   NJ.saved={x:M.P.x,z:M.P.z,h:M.P.h};
@@ -544,7 +669,7 @@ NJ.exit=function(){
   if(!NJ.on)return;
   NJ.on=false;NJ.ready=false;NJ.curY=0;NJ.pitch=0;M.carRoot.position.y=0;M.carRoot.rotation.x=0;M.carRoot.rotation.order='XYZ';{const mm=document.getElementById('mini');if(mm)mm.style.visibility='';}
   for(const[,t]of NJ.tiles)disposeTile(t);NJ.tiles.clear();
-  M.scene.remove(NJ.group);M.scene.remove(waterMesh);if(skyline)M.scene.remove(skyline);if(NJ.farOld){M.camera.far=NJ.farOld;M.camera.updateProjectionMatrix();}for(const c of TR.cars)M.scene.remove(c.o.root);TR.cars.length=0;
+  M.scene.remove(NJ.group);M.scene.remove(waterMesh);if(skyline)M.scene.remove(skyline);if(landmarkMesh)M.scene.remove(landmarkMesh);if(NJ.farOld){M.camera.far=NJ.farOld;M.camera.updateProjectionMatrix();}for(const c of TR.cars)M.scene.remove(c.o.root);TR.cars.length=0;
   restoreOld();restorePois();
   M.teleport(-3.6,-60,0);
   M.toast('Back to MotorCities',2500);
@@ -586,6 +711,6 @@ NJ.update=function(dt){NJ.dt=dt;
   trafficUpdate(Math.min(.1,NJ.dt||.033));
   if(NJ.frame%45===0)hideOld();
   if(NJ.frame%60===5)updatePoiMarkers();
-  {const dayF=M.dayF;const n=1-dayF;matLamp.color.setRGB(.35+n*.65,.35+n*.6,.35+n*.35);matGlow.opacity=n*.85;matSky.emissive.setRGB(n*.9,n*.85,.65*n);const hz=.55+.45*dayF;matSky.color.setRGB(.6*hz+.25,.68*hz+.25,.8*hz+.2);matBld.emissive.setRGB(n*1.0,n*.92,n*.7);matWater.color.setHex(0x2f6b99).multiplyScalar(.25+.75*dayF);}
+  {const dayF=M.dayF;const n=1-dayF;matShop.emissive.setRGB(n*.55,n*.5,n*.4);matLamp.color.setRGB(.35+n*.65,.35+n*.6,.35+n*.35);matGlow.opacity=n*.85;matSky.emissive.setRGB(n*.9,n*.85,.65*n);const hz=.55+.45*dayF;matSky.color.setRGB(.6*hz+.25,.68*hz+.25,.8*hz+.2);matBld.emissive.setRGB(n*1.0,n*.92,n*.7);matWater.color.setHex(0x2f6b99).multiplyScalar(.25+.75*dayF);}
 };
 })();
