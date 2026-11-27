@@ -594,6 +594,7 @@ input[type=range]{width:calc(var(--u)*220)}
   <div class="row"><button class="chip" id="chMode">🔁 Change mode</button></div>
   <div class="row" id="gcRow" style="display:none"><button class="chip" id="gcB">🎮 Game Center (leaderboards &amp; achievements)</button></div>
   <div class="row"><button class="chip" id="gfxB">✨ Graphics: High</button></div>
+  <div class="row"><button class="chip" id="credB">ℹ️ Credits</button></div>
   <div class="row"><button class="chip" id="payB">💸 Send coins to a username</button></div>
   <div id="about" style="font-size:11px;opacity:.7;line-height:1.35;margin:8px 0"></div>
   <div class="row"><button class="chip" id="restoreB2">↻ Restore Purchases</button></div>
@@ -1672,11 +1673,25 @@ function loadModelScene(id){
     new THREE.GLTFLoader().load('models/'+id+'.glb',g=>res(g.scene),undefined,()=>res(null));
   });
 }
+const MODEL_BY_ID={wrangler:'boxy-off-roader',bronco:'boxy-off-roader',g63:'boxy-off-roader',landcruiser:'boxy-off-roader',hilux:'boxy-off-roader',f150:'boxy-off-roader',silverado:'boxy-off-roader',ram:'boxy-off-roader',cybertruck:'electric-fastback',
+ model3:'electric-fastback',plaid:'electric-fastback',taycan:'electric-fastback',ioniq5:'electric-fastback',prius:'electric-fastback',
+ phantom:'luxury-limousine',sclass:'luxury-limousine',cullinan:'luxury-limousine',bentley:'grand-tourer',
+ supra:'grand-tourer',db11:'grand-tourer',amggt:'grand-tourer',ftype:'grand-tourer',vantage:'grand-tourer',lc500:'grand-tourer',gtr:'grand-tourer',
+ mustang:'muscle-coupe',camaro:'muscle-coupe',challenger:'muscle-coupe',charger:'muscle-coupe',corvette:'muscle-coupe',
+ p911:'rear-engine-sports-coupe',gt3rs:'rear-engine-sports-coupe',lotus:'rear-engine-sports-coupe',fordgt:'mid-engine-supercar',
+ m3:'sport-sedan',m5:'sport-sedan',c63:'sport-sedan',rs6:'sport-sedan',wrx:'sport-sedan',e46:'sport-sedan',
+ fiat500:'retro-city-car',mini:'retro-city-car',beetle:'retro-city-car',civic:'hot-hatchback',golf:'hot-hatchback',mazda3:'hot-hatchback',focus:'hot-hatchback',yaris:'hot-hatchback',
+ mx5:'retro-city-car',s2000:'retro-city-car',gt86:'muscle-coupe',z370:'muscle-coupe'};
+const MODEL_BY_BODY={hatch:'hot-hatchback',sedan:'executive-sedan',coupe:'muscle-coupe',sports:'rear-engine-sports-coupe',super:'mid-engine-supercar',hyper:'mid-engine-supercar',suv:'luxury-suv',pickup:'boxy-off-roader',mini:'retro-city-car',minivan:'luxury-suv',wagon:'executive-sedan',cyber:'electric-fastback'};
+function modelFile(spec,cfg){return(cfg&&cfg.model)||MODEL_BY_ID[spec.id]||MODEL_BY_BODY[spec.body]||spec.id;}
 function queueCarModel(c,spec,hex){
   c.modelFor=spec.id;
-  Promise.all([modelCfg(),loadModelScene(spec.id)]).then(([cfgAll,scene])=>{
-    if(!scene||c.disposed)return;
-    attachCarModel(c,scene,(cfgAll&&cfgAll[spec.id])||{},hex,spec);
+  modelCfg().then(cfgAll=>{
+    const file=modelFile(spec,cfgAll&&cfgAll[spec.id]);
+    return loadModelScene(file).then(scene=>{
+      if(!scene||c.disposed)return;
+      attachCarModel(c,scene,(cfgAll&&cfgAll[spec.id])||{},hex,spec);
+    });
   });
 }
 function attachCarModel(c,scene,cfg,hex,spec){
@@ -1698,13 +1713,14 @@ function attachCarModel(c,scene,cfg,hex,spec){
   mats.forEach(m=>{
     const nm=nameOf(m);
     if(m===c.tailMat||m===headMat)return;
+    if(m.isMeshStandardMaterial&&!m.envMap){m.envMap=carMat.envMap;m.envMapIntensity=.6;m.needsUpdate=true;}
     if(paintRe.test(nm)&&m.color){m.color.set(hex);paintN++;m.envMap=carMat.envMap;m.envMapIntensity=m.envMapIntensity||1;m.needsUpdate=true;}
   });
   c.root.add(M);c.modelGroup=M;c.root.updateMatrixWorld(true);
   // wheels: find them by name, lift them out so they spin and steer
   const found=[];
-  const wRe=cfg.wheel?new RegExp(cfg.wheel,'i'):/wheel|tire|tyre|rim/i,skipRe=/brake|caliper|disc|rotor|hub.?cap|bolt|nut/i;
-  inner.traverse(o=>{if(o!==inner&&wRe.test(o.name||'')&&!skipRe.test(o.name||'')&&!found.some(f=>{let p=o.parent;while(p){if(p===f)return true;p=p.parent;}return false;}))found.push(o);});
+  const wRe=cfg.wheel?new RegExp(cfg.wheel,'i'):/wheel|tire|tyre|rim/i,skipRe=/brake|caliper|disc|rotor|hub.?cap|bolt|nut|steering|spare/i;
+  inner.traverse(o=>{let sk=false;for(let q=o;q&&q!==inner;q=q.parent)if(skipRe.test(q.name||''))sk=true;if(o!==inner&&!sk&&wRe.test(o.name||'')&&!found.some(f=>{let p=o.parent;while(p){if(p===f)return true;p=p.parent;}return false;}))found.push(o);});
   const wl=[];
   if(found.length>=4){
     // group parts belonging to the same corner (tire + rim) by proximity
@@ -4276,6 +4292,7 @@ function payNetRecv(topic,txt){
 const gfxLbl=()=>{$('gfxB').textContent='✨ Graphics: '+(GFX.q==='high'?'High (shadows, reflections)':'Standard (faster)');};
 $('gfxB').onclick=()=>{GFX.q=GFX.q==='high'?'std':'high';save.gfx=GFX.q;persist();gfxApply();gfxLbl();};
 gfxLbl();
+$('credB').onclick=()=>toast('3D car models: "Realistic Cars" by vinish.dev (vinish.dev/free-3d-models), CC BY 4.0 — resized and recoloured for MotorX.',6500);
 $('payB').onclick=()=>{closeModal('settings');payRender();openModal('payM');};
 $('payX').onclick=()=>closeModal('payM');
 
