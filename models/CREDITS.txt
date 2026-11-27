@@ -15,3 +15,5 @@ Credit lines for Realistic Cars (CC BY 4.0). Copy the lines for the models you u
 
 If you use the whole pack, one line is enough:
 "Realistic Cars" by vinish.dev (https://vinish.dev/free-3d-models/realistic-cars/), CC BY 4.0
+
+Map data: © OpenStreetMap contributors, ODbL (https://www.openstreetmap.org/copyright).

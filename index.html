@@ -594,6 +594,7 @@ input[type=range]{width:calc(var(--u)*220)}
   <div class="row"><button class="chip" id="chMode">🔁 Change mode</button></div>
   <div class="row" id="gcRow" style="display:none"><button class="chip" id="gcB">🎮 Game Center (leaderboards &amp; achievements)</button></div>
   <div class="row"><button class="chip" id="gfxB">✨ Graphics: High</button></div>
+  <div class="row"><button class="chip" id="njB">🗽 Travel to New Jersey (beta)</button></div>
   <div class="row"><button class="chip" id="credB">ℹ️ Credits</button></div>
   <div class="row"><button class="chip" id="payB">💸 Send coins to a username</button></div>
   <div id="about" style="font-size:11px;opacity:.7;line-height:1.35;margin:8px 0"></div>
@@ -3513,6 +3514,7 @@ function updateViewButtons(){$('vChase').classList.toggle('on',view==='chase');$
 
 /* ============ collisions ============ */
 function pointBlocked(x,z){
+  if(window.NJ&&NJ.on)return NJ.blocked(x,z);
   for(let q=0;q<DSOL.length;q++){const r=DSOL[q];if(x>r.x0&&x<r.x1&&z>r.z0&&z<r.z1&&(!r.on||r.on()))return true;}
   if(Math.abs(x)>=HALF||Math.abs(z)>=HALF)return false;
   const i=Math.floor(x/BLOCK),j=Math.floor(z/BLOCK),lx=x-i*BLOCK,lz=z-j*BLOCK;
@@ -3526,6 +3528,7 @@ function pointBlocked(x,z){
 }
 function hit(x,z,h){
   if(Math.abs(x)>WORLDB||Math.abs(z)>WORLDB)return true;
+  if(window.NJ&&NJ.on){const fx=Math.sin(h),fz=Math.cos(h),rx=-fz,rz=fx;for(const fl of[-2.7,0,2.7])for(const sd of[-1.15,1.15])if(NJ.blocked(x+fx*fl+rx*sd,z+fz*fl+rz*sd))return true;return false;}
   for(let q=0;q<V6SOL.length;q++){const s=V6SOL[q];if(Math.hypot(x-s[0],z-s[1])<4)return true;}
   const fx=Math.sin(h),fz=Math.cos(h),rx=-fz,rz=fx;
   for(const fl of[-2.7,0,2.7])for(const sd of[-1.15,1.15]){const px=x+fx*fl+rx*sd,pz=z+fz*fl+rz*sd;if(pointBlocked(px,pz)||roadPkHit(px,pz))return true;}
@@ -4292,7 +4295,8 @@ function payNetRecv(topic,txt){
 const gfxLbl=()=>{$('gfxB').textContent='✨ Graphics: '+(GFX.q==='high'?'High (shadows, reflections)':'Standard (faster)');};
 $('gfxB').onclick=()=>{GFX.q=GFX.q==='high'?'std':'high';save.gfx=GFX.q;persist();gfxApply();gfxLbl();};
 gfxLbl();
-$('credB').onclick=()=>toast('3D car models: "Realistic Cars" by vinish.dev (vinish.dev/free-3d-models), CC BY 4.0 — resized and recoloured for MotorX.',6500);
+$('njB').onclick=async()=>{closeModal('settings');if(window.NJ&&NJ.on){NJ.exit();$('njB').textContent='🗽 Travel to New Jersey (beta)';}else if(window.NJ){const ok=await NJ.enter();if(ok)$('njB').textContent='🏙 Back to MotorCities';}};
+$('credB').onclick=()=>toast('3D car models: "Realistic Cars" by vinish.dev (vinish.dev/free-3d-models), CC BY 4.0 — resized and recoloured for MotorX. New Jersey map data © OpenStreetMap contributors (ODbL).',8000);
 $('payB').onclick=()=>{closeModal('settings');payRender();openModal('payM');};
 $('payX').onclick=()=>closeModal('payM');
 
@@ -7942,7 +7946,7 @@ function frame(now){
   updateAudio(rpmN,input.gas,sp,audioSlip,input.brake,paused&&!garageOpen||!started||onFoot||!engineOn);
   if(garageOpen&&AC&&A.e1)updateAudio(.25,0,0,0,0,true);
   // render
-  frameNo++;
+  frameNo++;if(window.NJ)NJ.update();
   shadowFollow();
   if(!garageOpen&&started&&!onFoot&&!mapOpen&&!FL.on){
     const m=carObj.mirror,pers=view==='cockpit',intV=carObj.interior&&carObj.interior.group.visible;
@@ -9263,6 +9267,7 @@ function v6Step(dt){
 v6Dot();
 
 
+window.MXENV={scene,P,teleport,toast,carRoot,skyDome,sunMesh,moonMesh,stars,clouds,get dayF(){return dayF;}};
 const __gameObj={buildCar,scene,camera,renderer,hemi,sunL,moonL,carMat,setGear:g=>setGear(g),NAMES,PAY,payNetRecv,get engineOn(){return engineOn;},FL,PLANES,startFlight,endFlight,renderGarage,setGFilter:f=>{gFilter=f;},setEngine:v=>{engineOn=v;syncStart();},openMap:()=>openMap(),MAPPOIS:()=>MAPPOIS,carRoot,P,save,CARS,traffic,get gear(){return gearSel;},get active(){return active;},get board(){return board;},get rpm(){return rpmN;},get view(){return view;},
   setView:v=>{view=v;},startMission,startLevel,setMode,chooseMode,LEVELS,trySelect,input,setWeather:w=>{weather=w;},setHour:h=>{gameHour=h;timeAuto=false;},
   get paused(){return paused;},carObj:()=>carObj,openGarage,closeGarage,
@@ -9272,5 +9277,6 @@ const __gameObj={buildCar,scene,camera,renderer,hemi,sunL,moonL,carMat,setGear:g
 if(DEV)window.__game=__gameObj;
 })();
 </script>
+<script src="nj.js"></script>
 </body>
 </html>
