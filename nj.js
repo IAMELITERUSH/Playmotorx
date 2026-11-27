@@ -61,17 +61,34 @@ function tri(B,a,b,c,nx,ny,nz){
   const gx=uy*vz-uz*vy,gy=uz*vx-ux*vz,gz=ux*vy-uy*vx;
   if(gx*nx+gy*ny+gz*nz>=0)B.i.push(a,b,c);else B.i.push(a,c,b);
 }
-function ribbon(B,pts,w,y,rgb){
+function ribbon(B,pts,w,y,rgb,ys){
   const n=pts.length/2;if(n<2)return;
-  let base=-1;
   for(let i=0;i<n;i++){
     const i0=Math.max(0,i-1),i1=Math.min(n-1,i+1);
     let tx=pts[i1*2]-pts[i0*2],tz=pts[i1*2+1]-pts[i0*2+1];const L=Math.hypot(tx,tz)||1;tx/=L;tz/=L;
-    const nx=-tz*w/2,nz=tx*w/2;
-    const a=B.v(pts[i*2]+nx,y,pts[i*2+1]+nz,0,1,0,rgb[0],rgb[1],rgb[2]);
-    const b=B.v(pts[i*2]-nx,y,pts[i*2+1]-nz,0,1,0,rgb[0],rgb[1],rgb[2]);
+    const nx=-tz*w/2,nz=tx*w/2,yy=y+(ys?ys[i]:0);
+    const a=B.v(pts[i*2]+nx,yy,pts[i*2+1]+nz,0,1,0,rgb[0],rgb[1],rgb[2]);
+    const b=B.v(pts[i*2]-nx,yy,pts[i*2+1]-nz,0,1,0,rgb[0],rgb[1],rgb[2]);
     if(i>0){tri(B,a-2,b-2,a,0,1,0);tri(B,b-2,b,a,0,1,0);}
-    base=a;
+  }
+}
+// bridge deck sides + support columns
+function deckExtras(B,pts,ys,w){
+  const n=pts.length/2,sc=col(0x6a6c70,0,0),pc=col(0x55575b,0,0);let acc=0,next=12;
+  for(let i=0;i<n-1;i++){
+    const x0=pts[i*2],z0=pts[i*2+1],x1=pts[i*2+2],z1=pts[i*2+3],y0=ys[i],y1=ys[i+1],dx=x1-x0,dz=z1-z0,L=Math.hypot(dx,dz);if(L<.05)continue;
+    const nx=-dz/L,nz=dx/L,hw=w/2;
+    for(const sd of[1,-1]){
+      const ax=x0+nx*hw*sd,az=z0+nz*hw*sd,bx=x1+nx*hw*sd,bz=z1+nz*hw*sd;
+      const k=B.v(ax,y0+.04,az,nx*sd,0,nz*sd,sc[0],sc[1],sc[2]);B.v(bx,y1+.04,bz,nx*sd,0,nz*sd,sc[0],sc[1],sc[2]);B.v(bx,y1-1.1,bz,nx*sd,0,nz*sd,sc[0]*.8,sc[1]*.8,sc[2]*.8);B.v(ax,y0-1.1,az,nx*sd,0,nz*sd,sc[0]*.8,sc[1]*.8,sc[2]*.8);
+      tri(B,k,k+1,k+2,nx*sd,0,nz*sd);tri(B,k,k+2,k+3,nx*sd,0,nz*sd);
+      // low parapet
+      const pk=B.v(ax,y0+.04,az,nx*sd,0,nz*sd,.62,.62,.64);B.v(bx,y1+.04,bz,nx*sd,0,nz*sd,.62,.62,.64);B.v(bx,y1+.95,bz,nx*sd,0,nz*sd,.7,.7,.72);B.v(ax,y0+.95,az,nx*sd,0,nz*sd,.7,.7,.72);
+      tri(B,pk,pk+1,pk+2,nx*sd,0,nz*sd);tri(B,pk,pk+2,pk+3,nx*sd,0,nz*sd);
+      tri(B,pk,pk+1,pk+2,-nx*sd,0,-nz*sd);tri(B,pk,pk+2,pk+3,-nx*sd,0,-nz*sd);
+    }
+    while(acc+L>=next){const f=(next-acc)/L,y=y0+(y1-y0)*f;if(y>2)boxB(B,x0+dx*f,0,z0+dz*f,1.6,y-1.0,1.6,pc);next+=34;}
+    acc+=L;
   }
 }
 function polyFlat(B,pts,y,rgb){
@@ -189,16 +206,18 @@ function buildTile(key,data){
     ribbon(F,polyPts(r[3]),w+(t>=8?5.2:6),.022,col(0x9b9c97,.6,.5));
   }
   // roads, drawn big-to-small so majors win overlaps
+  const br=[];
   const roads=(data.r||[]).slice().sort((a,b)=>b[0]-a[0]);
   for(const r of roads){
     const t=r[0],ln=r[1],fl=r[2];if(fl&4)continue;
     let w=ROAD_W[t]||5;if(ln)w=Math.max(w,ln*3.3*((fl&1)?1:1));if(!(fl&1)&&t<=3)w=Math.max(w,7);
     const y=.04+(13-t)*.0035+((fl&2)?.05:0);
-    const pts=polyPts(r[3]);
-    ribbon(F,pts,w,y,col(ROAD_COL[t]||0x4a4d52,0,0));
-    if(t<=8&&!(fl&2))lamps(F,Lm,Gl,pts,w);
-    if(!(fl&1)&&t<=12&&t>=2)ribbon(F,pts,.2,y+.01,col(0xd6b53a,0,0));
-    else if((fl&1)&&t<=3)ribbon(F,pts,.16,y+.01,col(0xe8e8e8,0,0));
+    const pts=polyPts(r[3]),ys=r[4]?polyPts(r[4]):null;
+    ribbon(F,pts,w,y,col(ROAD_COL[t]||0x4a4d52,0,0),ys);
+    if(ys){deckExtras(F,pts,ys,w);br.push({pts:pts.map((v,q)=>v+((q&1)?oz:ox)),ys,w});}
+    if(t<=8&&!ys)lamps(F,Lm,Gl,pts,w);
+    if(!(fl&1)&&t<=12&&t>=2)ribbon(F,pts,.2,y+.01,col(0xd6b53a,0,0),ys);
+    else if((fl&1)&&t<=3)ribbon(F,pts,.16,y+.01,col(0xe8e8e8,0,0),ys);
   }
   // crosswalks at junctions (vertices shared by 2+ roads)
   {const vm=new Map();const rs=data.r||[];
@@ -256,7 +275,7 @@ function buildTile(key,data){
   NJ.stats.bld+=col2.length;
   const ways=[];
   for(const r of data.r||[]){if(r[0]>11||(r[2]&6))continue;const pts=polyPts(r[3]);for(let q=0;q<pts.length;q+=2){pts[q]+=ox;pts[q+1]+=oz;}ways.push({pts,t:r[0],oneway:!!(r[2]&1)});}
-  return{key,group:g,col:col2,ways};
+  return{key,group:g,col:col2,ways,br};
 }
 function disposeTile(t){NJ.group.remove(t.group);t.group.traverse(o=>{if(o.geometry)o.geometry.dispose();});NJ.stats.bld-=t.col.length;}
 
@@ -268,8 +287,44 @@ function landAt(x,z){
   const i=b*m.W+a;return(m.bits[i>>3]>>(i&7))&1;
 }
 NJ.landAt=landAt;
+NJ.curY=0;
+// heights of road decks at (x,z); returns array of candidate surface heights
+function decksAt(x,z,out){
+  const ti=Math.floor(x/T),tj=Math.floor(z/T);
+  for(let di=-1;di<=1;di++)for(let dj=-1;dj<=1;dj++){
+    const t=NJ.tiles.get((ti+di)+'_'+(tj+dj));if(!t||!t.br)continue;
+    for(const b of t.br){
+      const p=b.pts,ys=b.ys,n=p.length/2,hw=b.w/2+.2;
+      for(let i=0;i<n-1;i++){
+        const ax=p[i*2],az=p[i*2+1],bx=p[i*2+2],bz=p[i*2+3];
+        if(x<Math.min(ax,bx)-hw||x>Math.max(ax,bx)+hw||z<Math.min(az,bz)-hw||z>Math.max(az,bz)+hw)continue;
+        const dx=bx-ax,dz=bz-az,L2=dx*dx+dz*dz;if(L2<.01)continue;
+        let u=((x-ax)*dx+(z-az)*dz)/L2;if(u<0||u>1)continue;
+        const lx=ax+dx*u-x,lz=az+dz*u-z;if(lx*lx+lz*lz>hw*hw)continue;
+        out.push(ys[i]+(ys[i+1]-ys[i])*u);
+      }
+    }
+  }
+  return out;
+}
+const _dk=[];
+NJ.groundY=function(x,z,ref){
+  _dk.length=0;decksAt(x,z,_dk);
+  let best=0,bd=Math.abs(ref-0);
+  for(const y of _dk){const d=Math.abs(y-ref);if(d<bd){bd=d;best=y;}}
+  return best;
+};
 NJ.blocked=function(x,z){
-  if(!landAt(x,z))return true;
+  const cy=NJ.curY;
+  _dk.length=0;decksAt(x,z,_dk);
+  if(cy>2.2){ // on an elevated deck: railings keep you on it
+    let ok=false;for(const y of _dk)if(Math.abs(y-cy)<3.2){ok=true;break;}
+    return !ok;
+  }
+  if(!landAt(x,z)){ // water: bridges and decks near ground level are fine
+    for(const y of _dk)if(Math.abs(y-cy)<3.2)return false;
+    return true;
+  }
   const t=NJ.tiles.get(Math.floor(x/T)+'_'+Math.floor(z/T));
   if(!t||t.loading)return false;
   const L=t.col;
@@ -487,7 +542,7 @@ NJ.enter=async function(){
 };
 NJ.exit=function(){
   if(!NJ.on)return;
-  NJ.on=false;NJ.ready=false;{const mm=document.getElementById('mini');if(mm)mm.style.visibility='';}
+  NJ.on=false;NJ.ready=false;NJ.curY=0;NJ.pitch=0;M.carRoot.position.y=0;M.carRoot.rotation.x=0;M.carRoot.rotation.order='XYZ';{const mm=document.getElementById('mini');if(mm)mm.style.visibility='';}
   for(const[,t]of NJ.tiles)disposeTile(t);NJ.tiles.clear();
   M.scene.remove(NJ.group);M.scene.remove(waterMesh);if(skyline)M.scene.remove(skyline);if(NJ.farOld){M.camera.far=NJ.farOld;M.camera.updateProjectionMatrix();}for(const c of TR.cars)M.scene.remove(c.o.root);TR.cars.length=0;
   restoreOld();restorePois();
@@ -514,6 +569,15 @@ function sampleRoads(key,data){
 }
 /* ---------- per-frame ---------- */
 NJ.update=function(dt){NJ.dt=dt;
+  if(NJ.on&&NJ.ready){
+    const h=M.P.h,fx=Math.sin(h),fz=Math.cos(h),k=Math.min(1,(dt||.033)*10);
+    const yT=NJ.groundY(M.P.x,M.P.z,NJ.curY);
+    NJ.curY+=(yT-NJ.curY)*Math.min(1,(dt||.033)*14);if(Math.abs(yT-NJ.curY)<.01)NJ.curY=yT;
+    const yF=NJ.groundY(M.P.x+fx*2.2,M.P.z+fz*2.2,NJ.curY),yB=NJ.groundY(M.P.x-fx*2.2,M.P.z-fz*2.2,NJ.curY);
+    NJ.pitch=(NJ.pitch||0)+((-Math.atan2(yF-yB,4.4))-(NJ.pitch||0))*k;
+    M.carRoot.rotation.order='YXZ';M.carRoot.position.y=NJ.curY;M.carRoot.rotation.x=NJ.pitch;
+    M.camera.position.y+=NJ.curY;
+  }
   if(!NJ.on)return;
   NJ.frame++;
   if(M.scene.fog&&M.scene.fog.far>=400)M.scene.fog.far=1800;
