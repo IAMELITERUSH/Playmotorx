@@ -593,6 +593,7 @@ input[type=range]{width:calc(var(--u)*220)}
   <div class="row">Camera: <button class="chip" id="vChase">Chase</button><button class="chip" id="vCock">Inside car</button></div>
   <div class="row"><button class="chip" id="chMode">🔁 Change mode</button></div>
   <div class="row" id="gcRow" style="display:none"><button class="chip" id="gcB">🎮 Game Center (leaderboards &amp; achievements)</button></div>
+  <div class="row"><button class="chip" id="gfxB">✨ Graphics: High</button></div>
   <div class="row"><button class="chip" id="payB">💸 Send coins to a username</button></div>
   <div id="about" style="font-size:11px;opacity:.7;line-height:1.35;margin:8px 0"></div>
   <div class="row"><button class="chip" id="restoreB2">↻ Restore Purchases</button></div>
@@ -856,7 +857,10 @@ const BODY={
 
 /* ============ three.js setup ============ */
 const renderer=new THREE.WebGLRenderer({canvas:$('c'),antialias:true});
+const GFX={q:(()=>{try{const j=JSON.parse(localStorage.getItem('motorx_save_v1')||'{}');if(j.gfx==='std'||j.gfx==='high')return j.gfx;}catch(e){}return (navigator.hardwareConcurrency||4)<4?'std':'high';})(),sc:0};
 renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.3;
+renderer.shadowMap.enabled=GFX.q==='high';renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.shadowMap.autoUpdate=false;
 const scene=new THREE.Scene();
 scene.background=new THREE.Color(0x87ceeb);
 scene.fog=new THREE.Fog(0x87ceeb,80,520);
@@ -864,6 +868,9 @@ const camera=new THREE.PerspectiveCamera(65,1,0.3,620);
 const hemi=new THREE.HemisphereLight(0xffffff,0x334033,0.9); scene.add(hemi);
 const sunL=new THREE.DirectionalLight(0xffffff,0.8); scene.add(sunL);
 const moonL=new THREE.DirectionalLight(0x6f86c9,0); moonL.position.set(30,100,-40); scene.add(moonL);
+scene.add(sunL.target);
+sunL.castShadow=true;sunL.shadow.mapSize.set(2048,2048);
+{const c=sunL.shadow.camera;c.left=-70;c.right=70;c.top=70;c.bottom=-70;c.near=5;c.far=320;sunL.shadow.bias=-.0005;sunL.shadow.normalBias=.35;sunL.shadow.radius=2.2;}
 
 /* ---------- geometry merge helper ---------- */
 const _T=new THREE.Object3D();
@@ -898,14 +905,22 @@ function cabinGeo(w,h,l,topW,fK,rK){
 
 /* ---------- car builder: lofted bodies with a per-car design ---------- */
 const CAR_SCALE=1.3;
-const carMat=new THREE.MeshPhongMaterial({vertexColors:true,specular:0x5a606a,shininess:100,reflectivity:.28,combine:THREE.MixOperation});
-const intMat=new THREE.MeshLambertMaterial({vertexColors:true});
-{ // tiny fake sky/ground environment so paint and glass pick up a sheen
-  const face=(a,b,c)=>{const cv=document.createElement('canvas');cv.width=cv.height=32;const x=cv.getContext('2d');const g=x.createLinearGradient(0,0,0,32);g.addColorStop(0,a);g.addColorStop(.47,b);g.addColorStop(.5,c);g.addColorStop(1,'#202226');x.fillStyle=g;x.fillRect(0,0,32,32);return cv;};
-  const flat=c=>{const cv=document.createElement('canvas');cv.width=cv.height=32;const x=cv.getContext('2d');x.fillStyle=c;x.fillRect(0,0,32,32);return cv;};
-  const side=face('#74b2ea','#f4f7fb','#6d7279'),env=new THREE.CubeTexture([side,side,flat('#8cc4f2'),flat('#2a2c30'),side,side]);env.needsUpdate=true;
-  carMat.envMap=env;
+const carMat=new THREE.MeshStandardMaterial({vertexColors:true,metalness:.12,roughness:.34,envMapIntensity:1});
+{ // procedural sky + horizon + sun, baked to a reflection map so paint and glass show a real sheen
+  let done=false;
+  try{
+    const cv=document.createElement('canvas');cv.width=512;cv.height=256;const x=cv.getContext('2d');
+    const g=x.createLinearGradient(0,0,0,256);g.addColorStop(0,'#2f68c4');g.addColorStop(.3,'#6fa6e6');g.addColorStop(.47,'#e9f1fa');g.addColorStop(.5,'#cfd6dd');g.addColorStop(.53,'#5d6066');g.addColorStop(1,'#1c1d20');
+    x.fillStyle=g;x.fillRect(0,0,512,256);
+    const sg=x.createRadialGradient(150,70,2,150,70,60);sg.addColorStop(0,'rgba(255,250,235,1)');sg.addColorStop(.25,'rgba(255,240,205,.7)');sg.addColorStop(1,'rgba(255,240,205,0)');x.fillStyle=sg;x.fillRect(0,0,512,256);
+    x.fillStyle='rgba(255,255,255,.35)';for(let k=0;k<10;k++)x.fillRect(k*52+8,108,30,9);
+    const tex=new THREE.CanvasTexture(cv);tex.mapping=THREE.EquirectangularReflectionMapping;
+    const pm=new THREE.PMREMGenerator(renderer);const rt=pm.fromEquirectangular(tex);pm.dispose();tex.dispose();
+    carMat.envMap=rt.texture;done=true;
+  }catch(e){console.warn('env map',e.message);}
+  if(!done){carMat.metalness=.1;carMat.roughness=.45;}
 }
+const intMat=new THREE.MeshLambertMaterial({vertexColors:true});
 const headMat=new THREE.MeshBasicMaterial({color:0xfff6d0});
 const tailDim=new THREE.MeshBasicMaterial({color:0x8a1616});
 const KC=h=>new THREE.Color(h);
@@ -2658,6 +2673,11 @@ const sunMesh=new THREE.Mesh(new THREE.SphereGeometry(16,16,12),new THREE.MeshBa
 const moonMesh=new THREE.Mesh(new THREE.SphereGeometry(11,16,12),new THREE.MeshBasicMaterial({color:0xdde6ff,fog:false}));
 scene.add(sunMesh,moonMesh);
 const cloudMat=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.92,fog:false,depthWrite:false});
+const skyU={top:{value:new THREE.Color(0x3a78c8)},hor:{value:new THREE.Color(0x9ccdf0)},sun:{value:new THREE.Vector3(0,1,0)},sunCol:{value:new THREE.Color(1,.9,.7)},sunAmt:{value:1}};
+const skyDome=new THREE.Mesh(new THREE.SphereGeometry(560,28,14),new THREE.ShaderMaterial({uniforms:skyU,side:THREE.BackSide,depthWrite:false,fog:false,
+  vertexShader:'varying vec3 vD;void main(){vD=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+  fragmentShader:'uniform vec3 top,hor,sunCol,sun;uniform float sunAmt;varying vec3 vD;void main(){vec3 d=normalize(vD);float h=clamp(d.y,0.,1.);vec3 c=mix(hor,top,pow(h,.5));float s=max(dot(d,sun),0.);c+=sunCol*(pow(s,40.)*.5+pow(s,5.)*.2)*sunAmt;gl_FragColor=vec4(c,1.);}'}));
+skyDome.renderOrder=-10;skyDome.frustumCulled=false;scene.add(skyDome);
 const clouds=new THREE.Group();scene.add(clouds);
 {
   const sg=new THREE.SphereGeometry(1,10,8);
@@ -3500,6 +3520,26 @@ function hit(x,z,h){
 const skyDay=new THREE.Color(0x8ec9f5),skyNight=new THREE.Color(0x060a1a),skyWarm=new THREE.Color(0xff9a5c),grayDay=new THREE.Color(0x8d96a1);
 const tmpC=new THREE.Color(),sunDir=new THREE.Vector3();
 let dayF=1;
+function shadowFlag(o){
+  if(!o.isMesh||o.userData.noShadow)return;
+  const m=o.material;if(!m||Array.isArray(m)||m.isMeshBasicMaterial||m.isShaderMaterial||m.transparent||m.isSpriteMaterial)return;
+  if(o===skyDome)return;
+  o.castShadow=true;o.receiveShadow=true;
+}
+function shadowFollow(){
+  if(renderer.shadowMap.enabled){
+    if(scene.children.length!==GFX.sc){GFX.sc=scene.children.length;scene.traverse(shadowFlag);}
+    const px=Math.round(P.x/3)*3,pz=Math.round(P.z/3)*3;
+    sunL.target.position.set(px,0,pz);sunL.position.copy(sunDir).multiplyScalar(130).add(sunL.target.position);
+    sunL.target.updateMatrixWorld();
+    if(dayF>.06)renderer.shadowMap.needsUpdate=true;
+  }
+}
+function gfxApply(){
+  const hi=GFX.q==='high';
+  renderer.shadowMap.enabled=hi;GFX.sc=0;
+  scene.traverse(o=>{if(o.material&&!Array.isArray(o.material))o.material.needsUpdate=true;});
+}
 function updateEnv(dt){
   const tr=weather==='rain'?1:0,ts=weather==='snow'?1:0;
   rainAmt+=(tr-rainAmt)*Math.min(1,dt*.7);snowAmt+=(ts-snowAmt)*Math.min(1,dt*.7);
@@ -3510,9 +3550,13 @@ function updateEnv(dt){
   const sky=tmpC.copy(skyNight).lerp(skyDay,d).lerp(skyWarm,warm*.45);
   if(over>0){const g=grayDay.clone().multiplyScalar(.12+.88*d);sky.lerp(g,over*.8);}
   scene.background.copy(sky);scene.fog.color.copy(sky);
+  skyU.hor.value.copy(sky);skyU.top.value.copy(sky).multiply(new THREE.Color(.55,.72,1.1)).multiplyScalar(.9+.2*d);
+  skyU.sunCol.value.setRGB(1,lerp(.62,.9,smooth(0,.5,elev)),lerp(.35,.75,smooth(0,.5,elev)));skyU.sunAmt.value=clamp(elev*3+.5,0,1)*(1-.8*over);
+  carMat.envMapIntensity=.08+.6*d*(1-.5*over);
   scene.fog.near=lerp(lerp(80,35,rainAmt),22,snowAmt);scene.fog.far=lerp(lerp(520,250,rainAmt),190,snowAmt);
   sunDir.set(Math.cos(ang),Math.sin(ang),.4).normalize();
-  sunL.position.copy(sunDir).multiplyScalar(100);sunL.intensity=.8*d*(1-.55*over);
+  skyU.sun.value.copy(sunDir);skyDome.position.copy(camera.position);
+  sunL.position.copy(sunDir).multiplyScalar(100);sunL.intensity=(GFX.q==='high'?1.05:.8)*d*(1-.55*over);
   sunL.color.setRGB(1,lerp(.7,1,smooth(0,.5,elev)),lerp(.5,1,smooth(0,.5,elev)));
   moonL.intensity=.45*(1-d);
   hemi.intensity=.27+.41*d;hemi.color.copy(sky).lerp(new THREE.Color(0xffffff),.5);
@@ -4229,6 +4273,9 @@ function payNetRecv(topic,txt){
   GN.pub(topic,'',true); // clear the stored message so it is never replayed
   if($('payM').classList.contains('open'))payRender();
 }
+const gfxLbl=()=>{$('gfxB').textContent='✨ Graphics: '+(GFX.q==='high'?'High (shadows, reflections)':'Standard (faster)');};
+$('gfxB').onclick=()=>{GFX.q=GFX.q==='high'?'std':'high';save.gfx=GFX.q;persist();gfxApply();gfxLbl();};
+gfxLbl();
 $('payB').onclick=()=>{closeModal('settings');payRender();openModal('payM');};
 $('payX').onclick=()=>closeModal('payM');
 
@@ -7879,6 +7926,7 @@ function frame(now){
   if(garageOpen&&AC&&A.e1)updateAudio(.25,0,0,0,0,true);
   // render
   frameNo++;
+  shadowFollow();
   if(!garageOpen&&started&&!onFoot&&!mapOpen&&!FL.on){
     const m=carObj.mirror,pers=view==='cockpit',intV=carObj.interior&&carObj.interior.group.visible;
     if(intV)carObj.interior.group.visible=false;
@@ -9198,7 +9246,7 @@ function v6Step(dt){
 v6Dot();
 
 
-const __gameObj={setGear:g=>setGear(g),NAMES,PAY,payNetRecv,get engineOn(){return engineOn;},FL,PLANES,startFlight,endFlight,renderGarage,setGFilter:f=>{gFilter=f;},setEngine:v=>{engineOn=v;syncStart();},openMap:()=>openMap(),MAPPOIS:()=>MAPPOIS,carRoot,P,save,CARS,traffic,get gear(){return gearSel;},get active(){return active;},get board(){return board;},get rpm(){return rpmN;},get view(){return view;},
+const __gameObj={buildCar,scene,camera,renderer,hemi,sunL,moonL,carMat,setGear:g=>setGear(g),NAMES,PAY,payNetRecv,get engineOn(){return engineOn;},FL,PLANES,startFlight,endFlight,renderGarage,setGFilter:f=>{gFilter=f;},setEngine:v=>{engineOn=v;syncStart();},openMap:()=>openMap(),MAPPOIS:()=>MAPPOIS,carRoot,P,save,CARS,traffic,get gear(){return gearSel;},get active(){return active;},get board(){return board;},get rpm(){return rpmN;},get view(){return view;},
   setView:v=>{view=v;},startMission,startLevel,setMode,chooseMode,LEVELS,trySelect,input,setWeather:w=>{weather=w;},setHour:h=>{gameHour=h;timeAuto=false;},
   get paused(){return paused;},carObj:()=>carObj,openGarage,closeGarage,
   JOB,SH,Bench,JOBDEFS,JOBBY,shiftOpen,shiftEnd,serveCook,cashGive,jobBegin,jobArrive,pilotBegin,jobEnd,jobS,curDay,claimTask,buildDaily,SPOS,jobGo,pilotStep,attachJobInter,
